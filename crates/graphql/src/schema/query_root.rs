@@ -5,7 +5,7 @@ use objects::{
     denylist::Denylist,
     listing::{Listing, ListingColumns, ListingRow},
     marketplace::Marketplace,
-    nft::Nft,
+    nft::{Nft, NftWithCount},
     profile::{Profile, TwitterProfilePictureResponse, TwitterShowResponse},
     storefront::{Storefront, StorefrontColumns},
     wallet::Wallet,
@@ -93,7 +93,9 @@ impl QueryRoot {
         >,
         #[graphql(description = "Filter on attributes")] attributes: Option<Vec<AttributeFilter>>,
         #[graphql(description = "Filter on listed")] listed: Option<Vec<PublicKey<AuctionHouse>>>,
-    ) -> FieldResult<Vec<Nft>> {
+        #[graphql(description = "Pagination limit parameter")] limit: Option<i32>,
+        #[graphql(description = "Pagination offset parameter")] offset: Option<i32>,
+    ) -> FieldResult<NftWithCount> {
         if owners.is_none() && creators.is_none() && listed.is_none() {
             return Err(FieldError::new(
                 "No filter provided! Please provide at least one of the filters",
@@ -108,11 +110,16 @@ impl QueryRoot {
             creators: creators.map(|a| a.into_iter().map(Into::into).collect()),
             attributes: attributes.map(|a| a.into_iter().map(Into::into).collect()),
             listed: listed.map(|a| a.into_iter().map(Into::into).collect()),
+            limit: limit.map(Into::into),
+            offset: offset.map(Into::into),
         };
 
         let nfts = queries::metadatas::list(&conn, query_options)?;
 
-        Ok(nfts.into_iter().map(Into::into).collect())
+        Ok(NftWithCount {
+            nft: nfts.0.into_iter().map(Into::into).collect(),
+            count: nfts.1.try_into()?,
+        })
     }
 
     fn wallet(

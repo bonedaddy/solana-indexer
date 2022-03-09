@@ -4,6 +4,7 @@ use diesel::{pg::expression::dsl::any, prelude::*};
 use crate::{
     db::{
         models::Nft,
+        pagination::Paginate,
         tables::{
             attributes, listing_receipts, metadata_creators, metadata_jsons, metadatas,
             token_accounts,
@@ -32,6 +33,10 @@ pub struct ListQueryOptions {
     pub attributes: Option<Vec<AttributeFilter>>,
     /// nft listed with auction house
     pub listed: Option<Vec<String>>,
+    /// limit
+    pub limit: Option<i64>,
+    /// offset
+    pub offset: Option<i64>,
 }
 
 /// Handles queries for NFTs
@@ -45,8 +50,10 @@ pub fn list(
         creators,
         attributes,
         listed,
+        limit,
+        offset,
     }: ListQueryOptions,
-) -> Result<Vec<Nft>> {
+) -> Result<(Vec<Nft>, i64)> {
     let mut query = metadatas::table
         .inner_join(
             metadata_creators::table.on(metadatas::address.eq(metadata_creators::metadata_address)),
@@ -97,7 +104,7 @@ pub fn list(
             .filter(token_accounts::amount.eq(1));
     }
 
-    let rows: Vec<Nft> = query
+    let rows: (Vec<Nft>, i64) = query
         .select((
             metadatas::address,
             metadatas::name,
@@ -109,8 +116,9 @@ pub fn list(
         ))
         .distinct()
         .order_by(metadatas::name.desc())
-        .load(conn)
+        .paginate(limit, offset)
+        .load_with_pagination(conn)
         .context("failed to load nft(s)")?;
 
-    Ok(rows.into_iter().map(Into::into).collect())
+    Ok((rows.0.into_iter().map(Into::into).collect(), rows.1))
 }
